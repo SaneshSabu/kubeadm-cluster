@@ -1,0 +1,32 @@
+---
+- hosts: control_plane
+  become: yes
+  tasks:
+    - name: initialize the cluster
+      shell: kubeadm init --pod-network-cidr=10.244.0.0/16 --ignore-preflight-errors=NumCPU >> cluster_initialized.txt
+      args:
+        chdir: /home/kube-master
+        creates: cluster_initialized.txt
+      register: kubeadm_output
+
+    - name: create .kube directory
+      become: yes
+      file:
+        path: /home/kube-master/.kube
+        state: directory
+        mode: 0755
+
+    - name: copy admin.conf to user's kube config
+      when: kubeadm_output is succeeded
+      copy:
+        src: /etc/kubernetes/admin.conf
+        dest: /home/kube-master/.kube/config
+        remote_src: yes
+        owner: kube-master
+
+    - name: install Pod network
+      become: yes
+      shell: kubectl --kubeconfig=/home/kube-master/.kube/config apply -f https://raw.githubusercontent.com/coreos/flannel/master/Documentation/kube-flannel.yml >> pod_network_setup.txt
+      args:
+        chdir: /home/kube-master
+        creates: pod_network_setup.txt
